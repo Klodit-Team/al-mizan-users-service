@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganisationType {
+  EPA
+  EPIC
+  MINISTERE
+  ENTREPRISE_PRIVEE
+  ENTREPRISE_PUBLIQUE
+  GROUPEMENT
+}
+
+enum Language {
+  ar
+  fr
+}
+
+enum RoleName {
+  ADMIN
+  SERVICE_CONTRACTANT
+  OPERATEUR_ECONOMIQUE
+  MEMBRE_COMMISSION
+  CONTROLEUR
+}
+
+model Organisation {
+  id               String                @id @default(uuid()) @db.Char(36)
+  denomination     String                @db.VarChar(255)
+  nif              String?               @db.VarChar(50)
+  nis              String?               @db.VarChar(50)
+  registreCommerce String?               @map("registre_commerce") @db.VarChar(100)
+  adresse          String?               @db.Text
+  wilaya           String?               @db.VarChar(100)
+  commune          String?               @db.VarChar(100)
+  telephone        String?               @db.VarChar(20)
+  email            String?               @db.VarChar(255)
+  type             OrganisationType
+  isVerified       Boolean               @default(false) @map("is_verified")
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+  serviceContractants ServiceContractant[]
+  operateursEconomiques OperateurEconomique[]
+
+  @@index([denomination])
+  @@map("organisations")
+}
+
+model Profile {
+  id        String   @id @default(uuid()) @db.Char(36)
+  userId    String   @unique @map("user_id") @db.Char(36)
+  nom       String   @db.VarChar(100)
+  prenom    String   @db.VarChar(100)
+  telephone String?  @db.VarChar(20)
+  langue    Language @default(fr)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([nom, prenom])
+  @@map("profiles")
+}
+
+model ServiceContractant {
+  id             String       @id @default(uuid()) @db.Char(36)
+  organisationId String       @map("organisation_id") @db.Char(36)
+  userId         String       @map("user_id") @db.Char(36)
+  codeService    String       @map("code_service") @db.VarChar(50)
+  secteurActivite String?     @map("secteur_activite") @db.VarChar(255)
+  ordonateur     String?      @db.VarChar(255)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([organisationId])
+  @@index([userId])
+  @@map("services_contractants")
+}
+
+model OperateurEconomique {
+  id              String       @id @default(uuid()) @db.Char(36)
+  organisationId  String       @map("organisation_id") @db.Char(36)
+  userId          String       @map("user_id") @db.Char(36)
+  qualifications  String?      @db.Text
+  categories      String?      @db.VarChar(255)
+  isEligible      Boolean      @default(false) @map("is_eligible")
+  isBlacklisted   Boolean      @default(false) @map("is_blacklisted")
+  raisonBlacklist String?      @map("raison_blacklist") @db.Text
+  createdAt       DateTime     @default(now()) @map("created_at")
+  organisation    Organisation @relation(fields: [organisationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([organisationId])
+  @@index([userId])
+  @@map("operateurs_economiques")
+}
+
+model Role {
+  id          String     @id @default(uuid()) @db.Char(36)
+  name        RoleName   @unique
+  description String?    @db.VarChar(255)
+  userRoles   UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id         String   @id @default(uuid()) @db.Char(36)
+  userId     String   @map("user_id") @db.Char(36)
+  roleId     String   @map("role_id") @db.Char(36)
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
