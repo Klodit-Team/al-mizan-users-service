@@ -1,5 +1,36 @@
 import { PrismaClient, RoleName } from '@prisma/client';
 
+/**
+ * Database Seed File
+ *
+ * This file populates the Users Service database with initial data.
+ *
+ * RabbitMQ Integration Notes:
+ * ===========================
+ * The Users Service consumes events from the Authentication Service via RabbitMQ.
+ * When a user registers in the Auth Service, it publishes a 'user.registered' event
+ * with the following structure:
+ *
+ * {
+ *   "event_id": "uuid",
+ *   "user_id": "uuid (from auth service)",
+ *   "email": "user@example.com",
+ *   "timestamp": "2026-03-30T15:49:00Z"
+ * }
+ *
+ * The Users Service listens for these events via:
+ * - Service: AuthEventsListener (src/rabbitmq/auth-events.listener.ts)
+ * - Queue: users-service.user.registered
+ * - Handler: UserRegisteredHandler
+ *
+ * Configuration:
+ * - RABBITMQ_URL=amqp://guest:guest@localhost:5672
+ * - RABBITMQ_EXCHANGE=al-mizan.events
+ *
+ * The sample user IDs in this seed file simulate users that would have been
+ * registered via the Auth Service.
+ */
+
 const prisma = new PrismaClient();
 
 const SEEDED_IDS = {
