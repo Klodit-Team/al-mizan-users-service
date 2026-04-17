@@ -1,7 +1,31 @@
-import { IsEmail, IsEnum, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { OrganisationTypeEnum } from '../../common/enums/organisation-type.enum';
+import {
+  OrganisationDocumentDto,
+  OrganisationDocumentType,
+} from './organisation-document.dto';
 
 export class UpdateOrganisationDto {
+  @IsOptional()
+  @IsUUID()
+  userId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  eventId?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(255)
@@ -46,6 +70,33 @@ export class UpdateOrganisationDto {
   email?: string;
 
   @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrganisationDocumentDto)
+  documents?: OrganisationDocumentDto[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OrganisationDocumentDto)
+  nifFile?: OrganisationDocumentDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OrganisationDocumentDto)
+  nisFile?: OrganisationDocumentDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => OrganisationDocumentDto)
+  denominationFile?: OrganisationDocumentDto;
+
+  @IsOptional()
   @IsEnum(OrganisationTypeEnum)
   type?: OrganisationTypeEnum;
 }
+
+export const ORGANISATION_UPDATE_DOCUMENT_TYPE_BY_FIELD = {
+  nifFile: OrganisationDocumentType.NIF,
+  nisFile: OrganisationDocumentType.NIS,
+  denominationFile: OrganisationDocumentType.DENOMINATION,
+} as const;

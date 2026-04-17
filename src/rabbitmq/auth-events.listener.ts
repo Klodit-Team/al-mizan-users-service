@@ -8,6 +8,10 @@ import { OperateursEconomiquesService } from '../operateurs-economiques/operateu
 import { UserRolesService } from '../user-roles/user-roles.service';
 import { Language, RoleName } from '@prisma/client';
 import { LanguageEnum } from 'src/common/enums/language.enum';
+import {
+  OrganisationDocumentDto,
+  OrganisationDocumentType,
+} from '../organisations/dto/organisation-document.dto';
 
 export interface UserRegisteredEvent {
   event_id: string;
@@ -36,6 +40,39 @@ export interface UserRegisteredEvent {
   // OPERATEUR_ECONOMIQUE
   qualifications?: string;
   categories?: string;
+  documents?: OrganisationDocumentDto[];
+  nif_document_base64?: string;
+  nif_document_file_name?: string;
+  nif_document_mime_type?: string;
+  nis_document_base64?: string;
+  nis_document_file_name?: string;
+  nis_document_mime_type?: string;
+  denomination_document_base64?: string;
+  denomination_document_file_name?: string;
+  denomination_document_mime_type?: string;
+}
+
+interface DocumentationOrganisationDocumentsUploadedEvent {
+  event_id?: string;
+  correlation_id?: string;
+  organisation_id: string;
+  user_id?: string;
+  status?: 'success' | 'failed';
+  uploaded_documents?: Array<{
+    type: string;
+    document_id?: string;
+    storage_key?: string;
+    file_name?: string;
+    url?: string;
+    status?: string;
+  }>;
+  failed_documents?: Array<{
+    type: string;
+    file_name?: string;
+    reason?: string;
+  }>;
+  error?: string;
+  processed_at?: string;
 }
 
 class UserRegisteredHandler implements RabbitMqEventHandler {
@@ -68,6 +105,8 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
 
       // 1. Créer l'organisation
       const organisation = await this.organisationsService.create({
+        userId: event.user_id,
+        eventId: event.event_id,
         denomination: event.denomination,
         nif: event.nif,
         nis: event.nis,
@@ -77,7 +116,7 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
         commune: event.commune,
         type: event.type as any,
         email: event.email,
-       
+        documents: this.extractOrganisationDocuments(event),
       });
       this.logger.log(`  ✓ organisation créée : ${organisation.id}`);
 
@@ -185,6 +224,154 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
       return;
     }
   }
+
+  private extractOrganisationDocuments(event: UserRegisteredEvent): OrganisationDocumentDto[] {
+    if (event.documents?.length) {
+      return event.documents;
+    }
+
+    const documents: OrganisationDocumentDto[] = [];
+
+    if (event.nif_document_base64) {
+      documents.push({
+        type: OrganisationDocumentType.NIF,
+        fileName: event.nif_document_file_name ?? 'nif.pdf',
+        mimeType: event.nif_document_mime_type,
+        contentBase64: event.nif_document_base64,
+      });
+    }
+
+    if (event.nis_document_base64) {
+      documents.push({
+        type: OrganisationDocumentType.NIS,
+        fileName: event.nis_document_file_name ?? 'nis.pdf',
+        mimeType: event.nis_document_mime_type,
+        contentBase64: event.nis_document_base64,
+      });
+    }
+
+    if (event.denomination_document_base64) {
+      documents.push({
+        type: OrganisationDocumentType.DENOMINATION,
+        fileName: event.denomination_document_file_name ?? 'denomination.pdf',
+        mimeType: event.denomination_document_mime_type,
+        contentBase64: event.denomination_document_base64,
+      });
+    }
+
+    return documents;
+  }
+}
+
+class DocumentationOrganisationDocumentsUploadedHandler implements RabbitMqEventHandler {
+  constructor(
+    private readonly logger: Logger,
+    private readonly rabbitmq: RabbitMqService,
+    private readonly organisationsService: OrganisationsService,
+  ) {}
+
+  async handle(message: unknown): Promise<void> {
+    const event = message as DocumentationOrganisationDocumentsUploadedEvent;
+    const status = this.resolveStatus(event);
+
+    const references = this.toReferenceInputs(event);
+    if (references.length > 0) {
+      await this.organisationsService.upsertDocumentReferences(event.organisation_id, references);
+    }
+
+    this.logger.log(
+      `[DOCS.UPLOAD] organisation_id=${event.organisation_id} status=${status} correlation=${event.correlation_id ?? event.event_id ?? 'n/a'}`,
+    );
+
+    const ackPayload = {
+      event_id: event.event_id ?? event.correlation_id,
+      correlation_id: event.correlation_id ?? event.event_id,
+      organisation_id: event.organisation_id,
+      user_id: event.user_id,
+      status,
+      uploaded_documents: event.uploaded_documents ?? [],
+      failed_documents: event.failed_documents ?? [],
+      reason: event.error,
+      references_processed: references.length,
+      processed_at: event.processed_at ?? new Date().toISOString(),
+    };
+
+    await this.rabbitmq.publish('user.organisation.documents.upload.response', ackPayload);
+
+    if (status === 'success') {
+      await this.rabbitmq.publish('user.organisation.documents.uploaded', ackPayload);
+      return;
+    }
+
+    await this.rabbitmq.publish('user.organisation.documents.upload.failed', ackPayload);
+  }
+
+  private resolveStatus(
+    event: DocumentationOrganisationDocumentsUploadedEvent,
+  ): 'success' | 'failed' {
+    if (event.status === 'success' || event.status === 'failed') {
+      return event.status;
+    }
+
+    if (event.error || (event.failed_documents?.length ?? 0) > 0) {
+      return 'failed';
+    }
+
+    return 'success';
+  }
+
+  private toReferenceInputs(event: DocumentationOrganisationDocumentsUploadedEvent): Array<{
+    type: OrganisationDocumentType;
+    documentId: string;
+    fileName?: string;
+    storageKey?: string;
+    url?: string;
+    status?: string;
+  }> {
+    const uploaded = event.uploaded_documents ?? [];
+    const references: Array<{
+      type: OrganisationDocumentType;
+      documentId: string;
+      fileName?: string;
+      storageKey?: string;
+      url?: string;
+      status?: string;
+    }> = [];
+
+    for (const item of uploaded) {
+      const type = this.parseDocumentType(item.type);
+      const documentId = item.document_id ?? item.storage_key ?? item.url;
+
+      if (!type || !documentId) {
+        continue;
+      }
+
+      references.push({
+        type,
+        documentId,
+        fileName: item.file_name,
+        storageKey: item.storage_key,
+        url: item.url,
+        status: item.status ?? event.status ?? 'uploaded',
+      });
+    }
+
+    return references;
+  }
+
+  private parseDocumentType(type: string): OrganisationDocumentType | undefined {
+    if (type === OrganisationDocumentType.NIF) {
+      return OrganisationDocumentType.NIF;
+    }
+    if (type === OrganisationDocumentType.NIS) {
+      return OrganisationDocumentType.NIS;
+    }
+    if (type === OrganisationDocumentType.DENOMINATION) {
+      return OrganisationDocumentType.DENOMINATION;
+    }
+
+    return undefined;
+  }
 }
 
 @Injectable()
@@ -228,6 +415,25 @@ export class AuthEventsListener implements OnApplicationBootstrap {
         'user.registered',
         handler,
         'users-service.user.registered',
+      );
+
+      const documentationDocumentsUploadedHandler =
+        new DocumentationOrganisationDocumentsUploadedHandler(
+          this.logger,
+          this.rabbitmq,
+          organisationsService,
+        );
+
+      await this.rabbitmq.subscribe(
+        'documentation.organisation.documents.uploaded',
+        documentationDocumentsUploadedHandler,
+        'users-service.documentation.organisation.documents.uploaded',
+      );
+
+      await this.rabbitmq.subscribe(
+        'documentation.organisation.documents.failed',
+        documentationDocumentsUploadedHandler,
+        'users-service.documentation.organisation.documents.failed',
       );
 
       this.logger.log('✓ Auth Events Listeners initialisés');

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -29,6 +29,12 @@ enum RoleName {
   CONTROLEUR
 }
 
+enum OrganisationDocumentType {
+  NIS
+  NIF
+  DENOMINATION
+}
+
 model Organisation {
   id               String                @id @default(uuid()) @db.Char(36)
   denomination     String                @db.VarChar(255)
@@ -44,11 +50,31 @@ model Organisation {
   isVerified       Boolean               @default(false) @map("is_verified")
   createdAt        DateTime              @default(now()) @map("created_at")
   updatedAt        DateTime              @updatedAt @map("updated_at")
+  documentReferences OrganisationDocumentReference[]
   serviceContractants ServiceContractant[]
   operateursEconomiques OperateurEconomique[]
 
   @@index([denomination])
   @@map("organisations")
+}
+
+model OrganisationDocumentReference {
+  id             String                   @id @default(uuid()) @db.Char(36)
+  organisationId String                   @map("organisation_id") @db.Char(36)
+  type           OrganisationDocumentType
+  documentId     String                   @map("document_id") @db.VarChar(120)
+  fileName       String?                  @map("file_name") @db.VarChar(255)
+  storageKey     String?                  @map("storage_key") @db.VarChar(255)
+  url            String?                  @db.Text
+  status         String?                  @db.VarChar(50)
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
+  organisation   Organisation             @relation(fields: [organisationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([organisationId, type])
+  @@index([documentId])
+  @@index([organisationId])
+  @@map("organisation_document_references")
 }
 
 model Profile {

@@ -6,27 +6,42 @@ import { UpdateOrganisationDto } from './dto/update-organisation.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
 import { buildPagination } from '../common/utils/pagination.util';
+import { OrganisationDocumentType } from './dto/organisation-document.dto';
+
+interface OrganisationDocumentReferenceUpsertInput {
+  type: OrganisationDocumentType;
+  documentId: string;
+  fileName?: string;
+  storageKey?: string;
+  url?: string;
+  status?: string;
+}
 
 @Injectable()
 export class OrganisationsService {
+  private get prismaClient(): any {
+    return this.prisma;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitMqService: RabbitMqService,
   ) {}
 
   async create(dto: CreateOrganisationDto) {
+    const {
+      documents,
+      nifFile,
+      nisFile,
+      denominationFile,
+      userId,
+      eventId,
+      ...createData
+    } = dto;
+
     const organisation = await this.prisma.organisation.create({
       data: {
-        denomination: dto.denomination,
-        nif: dto.nif,
-        nis: dto.nis,
-        registreCommerce: dto.registreCommerce,
-        adresse: dto.adresse,
-        wilaya: dto.wilaya,
-        commune: dto.commune,
-        telephone: dto.telephone,
-        email: dto.email,
-        type: dto.type,
+        ...createData,
       },
     });
 
@@ -75,7 +90,10 @@ export class OrganisationsService {
   }
 
   async getById(id: string) {
-    const organisation = await this.prisma.organisation.findUnique({ where: { id } });
+    const organisation = await this.prismaClient.organisation.findUnique({
+      where: { id },
+      include: { documentReferences: true },
+    });
     if (!organisation) {
       throw new NotFoundException(`Organisation ${id} not found`);
     }
@@ -85,9 +103,19 @@ export class OrganisationsService {
   async update(id: string, dto: UpdateOrganisationDto) {
     await this.getById(id);
 
+    const {
+      documents,
+      nifFile: _nifFile,
+      nisFile: _nisFile,
+      denominationFile: _denominationFile,
+      userId,
+      eventId,
+      ...updateData
+    } = dto;
+
     const organisation = await this.prisma.organisation.update({
       where: { id },
-      data: dto,
+      data: updateData,
     });
 
     await this.rabbitMqService.publish('organisation.updated', {
@@ -119,5 +147,45 @@ export class OrganisationsService {
     await this.rabbitMqService.publish('organisation.deleted', { organisationId: id });
 
     return { deleted: true };
+  }
+
+  async upsertDocumentReferences(
+    organisationId: string,
+    references: OrganisationDocumentReferenceUpsertInput[],
+  ): Promise<void> {
+    if (!references.length) {
+      return;
+    }
+
+    await this.getById(organisationId);
+
+    await this.prisma.$transaction(
+      references.map(reference =>
+        this.prismaClient.organisationDocumentReference.upsert({
+          where: {
+            organisationId_type: {
+              organisationId,
+              type: reference.type as any,
+            },
+          },
+          update: {
+            documentId: reference.documentId,
+            fileName: reference.fileName,
+            storageKey: reference.storageKey,
+            url: reference.url,
+            status: reference.status,
+          },
+          create: {
+            organisationId,
+            type: reference.type as any,
+            documentId: reference.documentId,
+            fileName: reference.fileName,
+            storageKey: reference.storageKey,
+            url: reference.url,
+            status: reference.status,
+          },
+        }),
+      ),
+    );
   }
 }
