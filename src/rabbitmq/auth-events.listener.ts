@@ -13,6 +13,50 @@ import {
   OrganisationDocumentType,
 } from '../organisations/dto/organisation-document.dto';
 
+function normalizeRoleName(role: unknown): RoleName | null {
+  if (typeof role !== 'string') {
+    return null;
+  }
+
+  const normalized = role
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .toUpperCase();
+
+  if (
+    normalized === RoleName.SERVICE_CONTRACTANT ||
+    normalized === 'CONTRACTANT' ||
+    normalized === 'SERVICECONTRACTANT'
+  ) {
+    return RoleName.SERVICE_CONTRACTANT;
+  }
+
+  if (
+    normalized === RoleName.OPERATEUR_ECONOMIQUE ||
+    normalized === 'OPERATEUR' ||
+    normalized === 'OPERATEURECONOMIQUE' ||
+    (normalized.includes('OPERATEUR') && normalized.includes('ECONOM'))
+  ) {
+    return RoleName.OPERATEUR_ECONOMIQUE;
+  }
+
+  if (normalized === RoleName.ADMIN) {
+    return RoleName.ADMIN;
+  }
+
+  if (normalized === RoleName.MEMBRE_COMMISSION) {
+    return RoleName.MEMBRE_COMMISSION;
+  }
+
+  if (normalized === RoleName.CONTROLEUR) {
+    return RoleName.CONTROLEUR;
+  }
+
+  return null;
+}
+
 export interface UserRegisteredEvent {
   event_id: string;
   user_id: string;
@@ -88,11 +132,16 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
 
   async handle(message: unknown): Promise<void> {
     const event = message as UserRegisteredEvent;
+    const canonicalRole = normalizeRoleName(event.role);
+
+    if (!canonicalRole) {
+      throw new Error(`Unsupported role in user.registered event: ${String(event.role)}`);
+    }
 
     this.logger.log(`[USER.REGISTERED] event_id=${event.event_id}`);
     this.logger.log(`  user_id      : ${event.user_id}`);
     this.logger.log(`  email        : ${event.email}`);
-    this.logger.log(`  role         : ${event.role}`);
+    this.logger.log(`  role         : ${canonicalRole}`);
     this.logger.log(`  nom          : ${event.nom} ${event.prenom}`);
     this.logger.log(`  denomination : ${event.denomination}`);
     this.logger.log(`  wilaya       : ${event.wilaya} / ${event.commune}`);
@@ -143,7 +192,7 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
       }
 
       // 3. Record spécifique au rôle
-      if (event.role === RoleName.SERVICE_CONTRACTANT) {
+      if (canonicalRole === RoleName.SERVICE_CONTRACTANT) {
         const serviceContractant = await this.serviceContractantsService.create({
           organisationId: organisation.id,
           userId: event.user_id,
@@ -153,7 +202,7 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
         });
         serviceContractantId = serviceContractant.id;
         this.logger.log(`  ✓ service_contractant créé`);
-      } else if (event.role === RoleName.OPERATEUR_ECONOMIQUE) {
+      } else if (canonicalRole === RoleName.OPERATEUR_ECONOMIQUE) {
         const operateurEconomique = await this.operateursEconomiquesService.create({
           organisationId: organisation.id,
           userId: event.user_id,
@@ -169,13 +218,13 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
       try {
         await this.userRolesService.assignByRoleName(
           event.user_id,
-          event.role as RoleName,
+          canonicalRole,
         );
-        this.logger.log(`  ✓ role assigné : ${event.role}`);
+        this.logger.log(`  ✓ role assigné : ${canonicalRole}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : '';
         if (message.includes('already assigned')) {
-          this.logger.warn(`  ⚠ role déjà assigné (${event.role}) pour user_id=${event.user_id}, on continue`);
+          this.logger.warn(`  ⚠ role déjà assigné (${canonicalRole}) pour user_id=${event.user_id}, on continue`);
         } else {
           throw error;
         }
@@ -188,7 +237,7 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
         correlation_id: event.event_id,
         user_id: event.user_id,
         email: event.email,
-        role: event.role,
+        role: canonicalRole,
         status: 'success',
         organisation_id: organisation.id,
         profile_id: profileId,

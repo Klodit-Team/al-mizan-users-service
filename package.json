@@ -6,7 +6,7 @@
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
-    "start:dev": "nest start --watch",
+    "start:dev": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && nest start --watch",
     "start:prod": "node dist/main.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init_users_service",
