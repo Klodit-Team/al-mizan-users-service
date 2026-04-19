@@ -24,7 +24,7 @@ import { PrismaClient, RoleName } from '@prisma/client';
  * - Handler: UserRegisteredHandler
  *
  * Configuration:
- * - RABBITMQ_URL=amqp://guest:guest@localhost:5673
+ * - RABBITMQ_URL=amqp://guest:guest@localhost:5672
  * - RABBITMQ_EXCHANGE=al-mizan.events
  *
  * The sample user IDs in this seed file simulate users that would have been
