@@ -18,7 +18,7 @@ pnpm-debug.log*
 # Prisma
 prisma/dev.db*
 prisma/*.db*
-
+ 
 # IDE / OS
 .vscode/
 .idea/
