@@ -26,3 +26,11 @@ prisma/*.db*
 
 # TypeScript cache
 *.tsbuildinfo
+
+#Uneccesary md files
+QUICK_REFERENCE.md
+RABBITMQ_INTEGRATION.md
+README_PROCESSUS_DOCUMENTS.md
+SETUP_GUIDE.md
+IMPLEMENTATION_COMPLETE.md
+INTEGRATION_SUMMARY.md

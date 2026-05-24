@@ -1,387 +1,310 @@
-# 📚 RabbitMQ Integration - Documentation Index
+# al-mizan-users-service
 
-## 🎯 Where to Start?
-
-Choose based on your need:
-
-### ⚡ I have 5 minutes
-→ Read: **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)**
-- Quick start instructions
-- Command cheatsheet
-- Common issues & solutions
-- Monitoring checklist
-
-### ⏱️ I have 15 minutes
-→ Read: **[SETUP_GUIDE.md](SETUP_GUIDE.md)**
-- Complete setup instructions
-- Prerequisites & configuration
-- Step-by-step walkthrough
-- Testing procedures
-
-### 📖 I have 30 minutes
-→ Read in order:
-1. **[INTEGRATION_SUMMARY.md](INTEGRATION_SUMMARY.md)** - Overview
-2. **[RABBITMQ_INTEGRATION.md](RABBITMQ_INTEGRATION.md)** - Technical details
-
-### 🔧 I want complete details
-→ Read: **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)**
-- Full architecture explanation
-- Code explanations
-- All features documented
-- Extension examples
-
-### 📝 I want to understand what changed
-→ Read: **[CHANGES.md](CHANGES.md)**
-- All files modified
-- All files created
-- Functional flow
-- Quality assurance details
+> **Service de Gestion des Utilisateurs** — Profils, organisations, rôles, services contractants et opérateurs économiques pour la plateforme Al-Mizan.
 
 ---
 
-## 📄 Documentation Files
+## Table des matières
 
-### 1. **QUICK_REFERENCE.md**
-```
-├─ Quick Start (5 min)
-├─ RabbitMQ Connection Details
-├─ Event Schemas
-├─ Key Files
-├─ Monitoring
-├─ Testing Methods
-├─ Configuration
-├─ API Methods
-├─ Troubleshooting
-└─ Checklist
-```
-**Best for**: Quick lookups, command cheatsheet  
-**Time**: 5-10 minutes  
-**Use case**: During development
+1. [Aperçu](#aperçu)
+2. [Technologies](#technologies)
+3. [Architecture & Réseau](#architecture--réseau)
+4. [Base de données](#base-de-données)
+5. [Variables d'environnement](#variables-denvironnement)
+6. [API REST](#api-rest)
+7. [Messagerie RabbitMQ](#messagerie-rabbitmq)
+8. [Commandes utiles](#commandes-utiles)
+9. [Docker](#docker)
 
 ---
 
-### 2. **INTEGRATION_SUMMARY.md**
-```
-├─ What Was Configured
-├─ How It Works
-├─ Current Functionality
-├─ Future Extensions
-├─ Files Modified
-└─ Verification Checklist
-```
-**Best for**: High-level overview  
-**Time**: 10 minutes  
-**Use case**: Understanding the big picture
+## Aperçu
+
+`al-mizan-users-service` est le service de gestion des identités métier. Il ne gère **pas** l'authentification (déléguée à `auth-service`), mais prend en charge :
+
+- La création des **profils utilisateurs** (nom, prénom, téléphone, langue).
+- La création et gestion des **organisations** (EPA, EPIC, Ministère, Entreprise...).
+- La gestion des **Services Contractants** (organismes publics) et **Opérateurs Économiques** (entreprises soumissionnaires).
+- L'assignation des **rôles** (`SERVICE_CONTRACTANT`, `OPERATEUR_ECONOMIQUE`, `ADMIN`, `MEMBRE_COMMISSION`, `CONTROLEUR`).
+- Le suivi des **références de documents d'organisation** uploadés par `documents-service`.
+
+Il est déclenché exclusivement via **RabbitMQ** sur l'événement `user.registered` émis par `auth-service`.
+
+Le service fonctionne en **NestJS** avec **Prisma ORM** sur **MySQL**, et expose une **API REST** complémentaire pour les interrogations directes.
 
 ---
 
-### 3. **SETUP_GUIDE.md**
-```
-├─ Quick Start
-├─ Architecture Overview
-├─ Prerequisites
-├─ Environment Setup
-├─ Service Startup
-├─ Testing Integration
-├─ Monitoring Guide
-├─ Configuration Reference
-├─ Production Deployment
-└─ Troubleshooting Guide
-```
-**Best for**: Initial setup and deployment  
-**Time**: 15-20 minutes  
-**Use case**: First-time setup, production deployment
+## Technologies
+
+| Technologie        | Version  | Rôle                                        |
+|--------------------|----------|---------------------------------------------|
+| Node.js            | 20 LTS   | Runtime                                     |
+| TypeScript         | ^5.9     | Langage                                     |
+| NestJS             | ^11.1    | Framework (modules, DI, guards)             |
+| Prisma ORM         | 6.16.2   | ORM + migrations MySQL                      |
+| MySQL              | 8.x      | Base de données principale                  |
+| amqplib            | ^0.10    | Client RabbitMQ bas niveau                  |
+| class-validator    | ^0.15    | Validation des DTOs                         |
+| class-transformer  | ^0.5     | Transformation des payloads                 |
+| @nestjs/swagger    | ^11.2    | Documentation OpenAPI auto-générée          |
+| swagger-ui-express | ^5.0     | UI Swagger intégrée                         |
 
 ---
 
-### 4. **RABBITMQ_INTEGRATION.md**
+## Architecture & Réseau
+
 ```
-├─ Overview
-├─ Architecture
-├─ Events Consumed
-├─ Configuration
-├─ Service Architecture
-├─ Event Flow Examples
-├─ Monitoring & Debugging
-├─ Error Handling
-├─ Testing
-├─ Future Extensions
-└─ References
+RabbitMQ ──[user.registered]──► users-service (:3002)
+                                        │
+                                        ├── MySQL  (mysql:3306 → al_mizan_users)
+                                        └── RabbitMQ (rabbitmq:5672)
+
+API Gateway (:3000) ──► users-service (:3002)   [REST direct]
 ```
-**Best for**: Technical deep dive  
-**Time**: 20-30 minutes  
-**Use case**: Understanding internals, extending features
+
+- **Port exposé** : `3002`
+- **Réseau Docker** : `al-mizan-network`
+- **Nom du conteneur** : `users-service`
+- **Swagger UI** : `http://localhost:3002/api/docs` (si `SWAGGER_ENABLED=true`)
 
 ---
 
-### 5. **IMPLEMENTATION_COMPLETE.md**
+## Base de données
+
+**Moteur** : MySQL 8 · **Schema** : `al_mizan_users`
+
+### Modèles Prisma
+
+#### `Organisation`
+| Champ             | Type              | Description                                    |
+|-------------------|-------------------|------------------------------------------------|
+| `id`              | String (UUID)     | PK                                             |
+| `denomination`    | String            | Nom de l'organisation                          |
+| `nif`, `nis`      | String?           | Identifiants fiscaux                           |
+| `registreCommerce`| String?           | Numéro RC                                      |
+| `adresse`, `wilaya`, `commune` | String? | Localisation                        |
+| `type`            | OrganisationType  | EPA, EPIC, MINISTERE, ENTREPRISE_PRIVEE, ENTREPRISE_PUBLIQUE, GROUPEMENT |
+| `isVerified`      | Boolean           | Vérifié par contrôleur                         |
+
+#### `Profile`
+| Champ      | Type     | Description              |
+|------------|----------|--------------------------|
+| `id`       | String   | PK                       |
+| `userId`   | String   | UNIQUE, réf. auth-service|
+| `nom`      | String   |                          |
+| `prenom`   | String   |                          |
+| `telephone`| String?  |                          |
+| `langue`   | Language | `fr` (défaut) ou `ar`    |
+
+#### `ServiceContractant`
+| Champ           | Type    | Description                       |
+|-----------------|---------|-----------------------------------|
+| `id`            | String  | PK                                |
+| `organisationId`| String  | FK → Organisation                 |
+| `userId`        | String  | Réf. auth-service                 |
+| `codeService`   | String  | Code unique du service            |
+| `secteurActivite`| String?|                                   |
+| `ordonateur`    | String? |                                   |
+
+#### `OperateurEconomique`
+| Champ            | Type    | Description                          |
+|------------------|---------|--------------------------------------|
+| `id`             | String  | PK                                   |
+| `organisationId` | String  | FK → Organisation                    |
+| `userId`         | String  | Réf. auth-service                    |
+| `qualifications` | String? |                                      |
+| `categories`     | String? |                                      |
+| `isEligible`     | Boolean | Défaut `false`                       |
+| `isBlacklisted`  | Boolean | Défaut `false` — blacklistage        |
+| `raisonBlacklist`| String? | Motif de blacklistage                |
+
+#### `Role` & `UserRole`
+| Rôle                  | Description                              |
+|-----------------------|------------------------------------------|
+| `ADMIN`               | Administrateur plateforme                |
+| `SERVICE_CONTRACTANT` | Organisme public acheteur                |
+| `OPERATEUR_ECONOMIQUE`| Entreprise soumissionnaire               |
+| `MEMBRE_COMMISSION`   | Membre de commission d'évaluation        |
+| `CONTROLEUR`          | Contrôleur externe                       |
+
+#### `OrganisationDocumentReference`
+Stocke les références (IDs MinIO) des documents uploadés pour une organisation (NIF, NIS, DENOMINATION).
+
+---
+
+## Variables d'environnement
+
+Copier `.env.example` → `.env` :
+
+```env
+PORT=3002
+NODE_ENV=development
+
+# Swagger
+SWAGGER_ENABLED=true
+SWAGGER_PATH=api/docs
+
+# MySQL
+DATABASE_URL="mysql://root@localhost:3306/al_mizan_users"
+
+# RabbitMQ
+RABBITMQ_URL="amqp://guest:guest@localhost:5672"
+RABBITMQ_EXCHANGE="al-mizan.events"
 ```
-├─ Implementation Summary
-├─ Architecture Diagram
-├─ Event Flow
-├─ File Responsibilities
-├─ How to Use
-├─ Monitoring Guide
-├─ Testing Procedures
-├─ Configuration Details
-├─ Current Capabilities
-├─ Future Extensions
-├─ Common Issues & Solutions
-└─ Verification Checklist
-```
-**Best for**: Comprehensive reference  
-**Time**: 25-35 minutes  
-**Use case**: Complete understanding, troubleshooting
+
+> ⚠️ En production (Docker), remplacer `localhost` par les noms de conteneurs : `mysql`, `rabbitmq`.
+
+> ⚠️ `NODE_ENV=development` est requis pour que les migrations Prisma s'exécutent automatiquement au démarrage.
 
 ---
 
-### 6. **CHANGES.md**
-```
-├─ Files Modified
-├─ Files Created
-├─ Summary of Changes
-├─ Functional Flow
-├─ Key Features Added
-├─ Dependencies
-├─ Configuration
-├─ Verification Methods
-└─ What's Next
-```
-**Best for**: Understanding what changed  
-**Time**: 10-15 minutes  
-**Use case**: Code review, change management
+## API REST
+
+Base URL (via Gateway) : `http://localhost:3000/users`  
+Base URL (directe) : `http://localhost:3002`  
+Swagger : `http://localhost:3002/api/docs`
+
+### Profils
+
+| Méthode | Endpoint               | Auth | Description                     |
+|---------|------------------------|------|---------------------------------|
+| `GET`   | `/profiles/:userId`    | Oui  | Récupérer le profil d'un user   |
+| `PATCH` | `/profiles/:userId`    | Oui  | Mettre à jour le profil         |
+
+### Organisations
+
+| Méthode | Endpoint                    | Auth | Description                          |
+|---------|-----------------------------|------|--------------------------------------|
+| `GET`   | `/organisations`            | Oui  | Lister toutes les organisations      |
+| `GET`   | `/organisations/:id`        | Oui  | Détail d'une organisation            |
+| `PATCH` | `/organisations/:id`        | Oui  | Mettre à jour une organisation       |
+
+### Services Contractants
+
+| Méthode | Endpoint                          | Auth | Description                            |
+|---------|-----------------------------------|------|----------------------------------------|
+| `GET`   | `/services-contractants`          | Oui  | Lister les services contractants       |
+| `GET`   | `/services-contractants/:userId`  | Oui  | Récupérer par user ID                  |
+
+### Opérateurs Économiques
+
+| Méthode | Endpoint                              | Auth | Description                             |
+|---------|---------------------------------------|------|-----------------------------------------|
+| `GET`   | `/operateurs-economiques`             | Oui  | Lister les OEs                          |
+| `GET`   | `/operateurs-economiques/:userId`     | Oui  | Récupérer par user ID                   |
+| `PATCH` | `/operateurs-economiques/:id/blacklist`| Oui | Blacklister un OE                       |
+
+### Rôles
+
+| Méthode | Endpoint              | Auth | Description           |
+|---------|-----------------------|------|-----------------------|
+| `GET`   | `/roles`              | Oui  | Lister les rôles      |
+| `POST`  | `/user-roles`         | Oui  | Assigner un rôle      |
+| `GET`   | `/user-roles/:userId` | Oui  | Rôles d'un utilisateur|
 
 ---
 
-## 🗺️ Quick Navigation
+## Messagerie RabbitMQ
 
-### By Task
+**Exchange** : `al-mizan.events` (type: `topic`, durable: `true`)
 
-**Getting Started**
-- Setup: → `SETUP_GUIDE.md` → Step 1-8
-- First run: → `QUICK_REFERENCE.md` → Quick Start
-- Understanding: → `INTEGRATION_SUMMARY.md`
+### Événements consommés
 
-**Development**
-- Quick lookup: → `QUICK_REFERENCE.md`
-- Extending: → `RABBITMQ_INTEGRATION.md` → Future Extensions
-- API reference: → `QUICK_REFERENCE.md` → API Methods
+| Routing Key (Queue)                                                   | Source           | Action réalisée                                                 |
+|-----------------------------------------------------------------------|------------------|-----------------------------------------------------------------|
+| `user.registered` (`users-service.user.registered`)                   | auth-service     | Créer organisation + profil + enregistrement rôle              |
+| `documentation.organisation.documents.uploaded` (`users-service.documentation.organisation.documents.uploaded`) | documents-service | Mettre à jour les références de documents de l'organisation |
+| `documentation.organisation.documents.failed` (`users-service.documentation.organisation.documents.failed`)   | documents-service | Mettre à jour avec statut d'échec                           |
 
-**Testing**
-- Manual test: → `QUICK_REFERENCE.md` → Test Message
-- Automated test: → `SETUP_GUIDE.md` → Testing
-- Debugging: → `RABBITMQ_INTEGRATION.md` → Testing section
+### Événements publiés
 
-**Production**
-- Deployment: → `SETUP_GUIDE.md` → Production Deployment
-- Monitoring: → `SETUP_GUIDE.md` → Monitoring
-- Issues: → `QUICK_REFERENCE.md` → Troubleshooting
+| Routing Key                                    | Déclencheur                                 | Payload clés                                                   |
+|------------------------------------------------|---------------------------------------------|----------------------------------------------------------------|
+| `user.registered.response`                     | Traitement `user.registered` terminé (OK)   | `user_id`, `organisation_id`, `profile_id`, `status: success` |
+| `user.registered.failed`                       | Traitement `user.registered` échoué         | `user_id`, `reason`, `status: failed`                         |
+| `user.organisation.documents.upload.response`  | Documents reçus de documents-service        | `organisation_id`, `uploaded_documents`, `status`             |
+| `user.organisation.documents.uploaded`         | Documents uploadés avec succès              | `organisation_id`, références complètes                        |
+| `user.organisation.documents.upload.failed`    | Échec upload documents                      | `organisation_id`, `failed_documents`                          |
 
-**Troubleshooting**
-- Quick fixes: → `QUICK_REFERENCE.md` → Troubleshooting
-- Detailed help: → `SETUP_GUIDE.md` → Troubleshooting Guide
-- Technical issues: → `IMPLEMENTATION_COMPLETE.md` → Common Issues
-
----
-
-## 📚 Content Map
-
-### Architecture & Design
-- **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)** - Architecture diagrams
-- **[RABBITMQ_INTEGRATION.md](RABBITMQ_INTEGRATION.md)** - Architecture details
-- **[INTEGRATION_SUMMARY.md](INTEGRATION_SUMMARY.md)** - High-level overview
-
-### Setup & Installation
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick start
-
-### Configuration
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Configuration reference
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Configuration summary
-
-### Testing
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Testing section
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Test message guide
-- **[RABBITMQ_INTEGRATION.md](RABBITMQ_INTEGRATION.md)** - Testing section
-
-### Monitoring
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Monitoring guide
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Monitoring checklist
-- **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)** - Monitoring guide
-
-### Troubleshooting
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick fixes
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Detailed troubleshooting
-- **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)** - Issues & solutions
-
-### Development & Extension
-- **[RABBITMQ_INTEGRATION.md](RABBITMQ_INTEGRATION.md)** - Future extensions
-- **[IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)** - Extension examples
-- **[CHANGES.md](CHANGES.md)** - What's next
-
----
-
-## 🔍 Search Guide
-
-### Looking for...
-
-**"How to start RabbitMQ"**
-→ `SETUP_GUIDE.md` → Prerequisites & Setup
-
-**"Event payload format"**
-→ `QUICK_REFERENCE.md` → Event Schemas  
-→ `IMPLEMENTATION_COMPLETE.md` → Event Flow
-
-**"Configuration variables"**
-→ `QUICK_REFERENCE.md` → Configuration  
-→ `SETUP_GUIDE.md` → Configuration Reference
-
-**"How to test"**
-→ `QUICK_REFERENCE.md` → Test Message  
-→ `SETUP_GUIDE.md` → Testing Integration  
-→ `RABBITMQ_INTEGRATION.md` → Testing
-
-**"Queue not receiving messages"**
-→ `QUICK_REFERENCE.md` → Troubleshooting  
-→ `IMPLEMENTATION_COMPLETE.md` → Common Issues
-
-**"Connection refused error"**
-→ `QUICK_REFERENCE.md` → Troubleshooting  
-→ `SETUP_GUIDE.md` → Troubleshooting Guide
-
-**"How to extend the integration"**
-→ `RABBITMQ_INTEGRATION.md` → Future Extensions  
-→ `IMPLEMENTATION_COMPLETE.md` → Future Extensions
-
-**"Production deployment"**
-→ `SETUP_GUIDE.md` → Production Deployment  
-→ `IMPLEMENTATION_COMPLETE.md` → Verification Checklist
-
----
-
-## ⏱️ Reading Time Guide
-
-| Document | Quick Read | Full Read | Best For |
-|----------|-----------|-----------|----------|
-| QUICK_REFERENCE.md | 5 min | 10 min | Fast lookup |
-| INTEGRATION_SUMMARY.md | 5 min | 10 min | Overview |
-| SETUP_GUIDE.md | 10 min | 15 min | Setup |
-| RABBITMQ_INTEGRATION.md | 10 min | 20 min | Technical |
-| IMPLEMENTATION_COMPLETE.md | 10 min | 25 min | Complete |
-| CHANGES.md | 5 min | 10 min | What changed |
-
-**Total**: ~60 minutes for full understanding
-
----
-
-## 🎯 Getting Started Roadmap
+#### Flux complet d'inscription :
 
 ```
-Day 1:
-├─ 10 min: Read QUICK_REFERENCE.md
-├─ 15 min: Follow SETUP_GUIDE.md steps 1-8
-└─ 10 min: Test with sample message
-
-Day 2:
-├─ 20 min: Read RABBITMQ_INTEGRATION.md
-├─ 15 min: Understand architecture
-└─ 15 min: Plan extensions
-
-Day 3:
-├─ 30 min: Implement extensions
-├─ 20 min: Test thoroughly
-└─ 10 min: Deploy to staging
+auth-service
+  └─[user.registered]──► users-service
+                              │
+                              ├─ Crée Organisation
+                              ├─ Crée Profile
+                              ├─ Crée ServiceContractant ou OperateurEconomique
+                              ├─ Assigne Role
+                              │
+                              ├─ OK  ──[user.registered.response {status:success}]──► auth-service
+                              └─ KO  ──[user.registered.failed]──► auth-service
+                                      [user.registered.response {status:failed}]──► auth-service
 ```
 
 ---
 
-## 📱 Mobile-Friendly Versions
+## Commandes utiles
 
-All documents are formatted for readability:
-- ✅ Clear section headings
-- ✅ Code blocks for copy-paste
-- ✅ Tables for quick reference
-- ✅ Bullet points for scanning
-- ✅ Links between documents
+### Développement local
 
----
+```bash
+# Installer les dépendances
+npm install
 
-## 🔗 Cross-References
+# Démarrer en mode dev (hot-reload NestJS watch)
+npm run start:dev
 
-### From QUICK_REFERENCE.md
-- Detailed setup → `SETUP_GUIDE.md`
-- Technical details → `RABBITMQ_INTEGRATION.md`
-- Full overview → `IMPLEMENTATION_COMPLETE.md`
+# Compiler TypeScript
+npm run build
 
-### From SETUP_GUIDE.md
-- Quick lookup → `QUICK_REFERENCE.md`
-- Technical dive → `RABBITMQ_INTEGRATION.md`
-- What changed → `CHANGES.md`
+# Démarrer en production
+npm run start:prod
+```
 
-### From RABBITMQ_INTEGRATION.md
-- Quick reference → `QUICK_REFERENCE.md`
-- Setup instructions → `SETUP_GUIDE.md`
-- Complete guide → `IMPLEMENTATION_COMPLETE.md`
+### Base de données
 
----
+```bash
+# Appliquer le schéma Prisma à la base (sans migration versionnée)
+npx prisma db push
 
-## 💡 Pro Tips
+# Générer le client Prisma
+npm run prisma:generate
 
-1. **First time?** Start with `SETUP_GUIDE.md` (don't skip!)
-2. **In a hurry?** Use `QUICK_REFERENCE.md` (5 min)
-3. **Debugging?** Check `QUICK_REFERENCE.md` troubleshooting section first
-4. **Want to extend?** Read `RABBITMQ_INTEGRATION.md` → Future Extensions
-5. **Understanding?** Read `IMPLEMENTATION_COMPLETE.md` in full
+# Créer une migration versionnée
+npm run prisma:migrate
 
----
+# Lancer le seed (rôles par défaut)
+npm run db:seed
 
-## ✅ Documentation Checklist
-
-- ✅ **QUICK_REFERENCE.md** - Ready to use
-- ✅ **INTEGRATION_SUMMARY.md** - Complete
-- ✅ **SETUP_GUIDE.md** - Comprehensive
-- ✅ **RABBITMQ_INTEGRATION.md** - Detailed
-- ✅ **IMPLEMENTATION_COMPLETE.md** - Full reference
-- ✅ **CHANGES.md** - What changed
-- ✅ **Documentation index** - This file
+# Ouvrir Prisma Studio
+npm run prisma:studio
+```
 
 ---
 
-## 🆘 Can't Find What You're Looking For?
+## Docker
 
-1. Check the **Search Guide** section above
-2. Use the **Cross-References** section
-3. Check the **Content Map** section
-4. Read **IMPLEMENTATION_COMPLETE.md** (most comprehensive)
-5. Contact the development team
+### Build de l'image
 
----
+```bash
+docker build -t al-mizan-users-service .
+```
 
-## 📊 Documentation Statistics
+### Notes importantes sur le Dockerfile
 
-| Document | Lines | Words | Sections |
-|----------|-------|-------|----------|
-| QUICK_REFERENCE.md | 350 | 2,100 | 15 |
-| INTEGRATION_SUMMARY.md | 200 | 1,200 | 12 |
-| SETUP_GUIDE.md | 700 | 4,200 | 20 |
-| RABBITMQ_INTEGRATION.md | 600 | 3,600 | 18 |
-| IMPLEMENTATION_COMPLETE.md | 600 | 3,600 | 22 |
-| CHANGES.md | 300 | 1,800 | 15 |
-| **Total** | **2,750** | **16,500** | **102** |
+- Image de base : `node:20-alpine`
+- Au démarrage du conteneur : `npx prisma db push && node dist/main.js`
+- **Pas de `openssl` explicite** — utiliser `node:20-alpine` suffit ici (Prisma 6.x).
 
----
+### Déploiement via docker-compose
 
-**Last Updated**: 2026-03-30  
-**Documentation Status**: ✅ Complete  
-**Total Coverage**: 100%
+```bash
+# Depuis al-mizan-deployments/
+docker-compose up -d users-service
+docker-compose logs -f users-service
+```
 
 ---
 
-## Quick Links
-
-- 📖 [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - 5 minute overview
-- 🚀 [SETUP_GUIDE.md](SETUP_GUIDE.md) - Getting started
-- 🏗️ [INTEGRATION_SUMMARY.md](INTEGRATION_SUMMARY.md) - What's included
-- 🔧 [RABBITMQ_INTEGRATION.md](RABBITMQ_INTEGRATION.md) - Technical details
-- ✅ [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md) - Full reference
-- 📝 [CHANGES.md](CHANGES.md) - What changed
+*Maintenu par l'équipe Al-Mizan — voir `al-mizan-deployments` pour la configuration de déploiement complète.*
