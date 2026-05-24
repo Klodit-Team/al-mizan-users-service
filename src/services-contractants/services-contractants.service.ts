@@ -96,4 +96,59 @@ export class ServicesContractantsService {
 
     return { deleted: true };
   }
+
+  async getProfileByUserId(userId: string) {
+    const entity = await this.prisma.serviceContractant.findFirst({
+      where: { userId },
+      include: { organisation: true },
+    });
+    if (!entity) {
+      throw new NotFoundException(`Service contractant profile not found for user ${userId}`);
+    }
+
+    const profile = await this.prisma.profile.findFirst({
+      where: { userId },
+    }).catch(() => null);
+
+    return {
+      userInfo: {
+        firstName: profile?.prenom || '',
+        lastName: profile?.nom || '',
+        email: '',
+        phone: profile?.telephone || '',
+        preferredLanguage: profile?.langue || 'fr',
+      },
+      organizationInfo: {
+        denomination: entity.organisation?.denomination || '',
+        nif: entity.organisation?.nif || '',
+        nis: entity.organisation?.nis || '',
+        rc: entity.organisation?.registreCommerce || '',
+        address: entity.organisation?.adresse || '',
+        wilaya: entity.organisation?.wilaya || '',
+        organizationType: entity.organisation?.type || '',
+        verificationStatus: entity.organisation?.isVerified ? 'verifie' : 'en_attente',
+      },
+      serviceInfo: {
+        serviceCode: entity.codeService || '',
+        activitySector: entity.secteurActivite || '',
+        ordonnateur: entity.ordonateur || '',
+      },
+    };
+  }
+
+  async updateProfileByUserId(userId: string, dto: UpdateServiceContractantDto) {
+    const entity = await this.prisma.serviceContractant.findFirst({
+      where: { userId },
+    });
+    if (!entity) {
+      throw new NotFoundException(`Service contractant profile not found for user ${userId}`);
+    }
+
+    await this.prisma.serviceContractant.update({
+      where: { id: entity.id },
+      data: dto,
+    });
+
+    return this.getProfileByUserId(userId);
+  }
 }

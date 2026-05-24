@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Headers } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CreateServiceContractantDto } from './dto/create-service-contractant.dto';
@@ -18,6 +18,16 @@ export class ServicesContractantsController {
   @Get()
   list(@Query() dto: PaginationQueryDto) {
     return this.servicesContractantsService.list(dto);
+  }
+
+  @Get('profile')
+  async getProfile(@Headers('x-user-id') userId: string) {
+    return this.servicesContractantsService.getProfileByUserId(userId);
+  }
+
+  @Put('profile')
+  async updateProfile(@Headers('x-user-id') userId: string, @Body() dto: UpdateServiceContractantDto) {
+    return this.servicesContractantsService.updateProfileByUserId(userId, dto);
   }
 
   @Get(':id')

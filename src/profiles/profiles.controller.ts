@@ -19,6 +19,11 @@ export class ProfilesController {
     return this.profilesService.getByUserId(userId);
   }
 
+  @Patch('user/:userId')
+  updateByUserId(@Param('userId') userId: string, @Body() dto: UpdateProfileDto) {
+    return this.profilesService.updateByUserId(userId, dto);
+  }
+
   @Get(':id')
   getById(@Param('id') id: string) {
     return this.profilesService.getById(id);

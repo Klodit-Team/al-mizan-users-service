@@ -43,6 +43,25 @@ export class ProfilesService {
     return profile;
   }
 
+  async updateByUserId(userId: string, dto: UpdateProfileDto) {
+    const profile = await this.prisma.profile.findUnique({ where: { userId } });
+    if (!profile) {
+      throw new NotFoundException(`Profile not found for user ${userId}`);
+    }
+
+    const updated = await this.prisma.profile.update({
+      where: { id: profile.id },
+      data: dto,
+    });
+
+    await this.rabbitMqService.publish('profile.updated', {
+      profileId: updated.id,
+      userId: updated.userId,
+    });
+
+    return updated;
+  }
+
   async update(id: string, dto: UpdateProfileDto) {
     await this.getById(id);
 
