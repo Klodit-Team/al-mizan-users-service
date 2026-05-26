@@ -77,6 +77,9 @@ export interface UserRegisteredEvent {
   wilaya?: string;
   commune?: string;
   type: string;
+  banque_nom?: string;
+  banque_rib?: string;
+  banque_agence?: string;
   // SERVICE_CONTRACTANT
   code_service?: string;
   secteur_activite?: string;
@@ -165,6 +168,9 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
         commune: event.commune,
         type: event.type as any,
         email: event.email,
+        banqueNom: event.banque_nom,
+        banqueRib: event.banque_rib,
+        banqueAgence: event.banque_agence,
         documents: this.extractOrganisationDocuments(event),
       });
       this.logger.log(`  ✓ organisation créée : ${organisation.id}`);
@@ -206,8 +212,6 @@ class UserRegisteredHandler implements RabbitMqEventHandler {
         const operateurEconomique = await this.operateursEconomiquesService.create({
           organisationId: organisation.id,
           userId: event.user_id,
-          qualifications: event.qualifications,
-          categories: event.categories,
           isEligible: true,
         });
         operateurEconomiqueId = operateurEconomique.id;

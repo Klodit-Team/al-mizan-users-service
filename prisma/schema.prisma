@@ -46,6 +46,9 @@ model Organisation {
   commune          String?               @db.VarChar(100)
   telephone        String?               @db.VarChar(20)
   email            String?               @db.VarChar(255)
+  banqueNom        String?               @map("banque_nom") @db.VarChar(255)
+  banqueRib        String?               @map("banque_rib") @db.VarChar(20)
+  banqueAgence     String?               @map("banque_agence") @db.VarChar(255)
   type             OrganisationType
   isVerified       Boolean               @default(false) @map("is_verified")
   createdAt        DateTime              @default(now()) @map("created_at")
@@ -95,7 +98,7 @@ model ServiceContractant {
   id             String       @id @default(uuid()) @db.Char(36)
   organisationId String       @map("organisation_id") @db.Char(36)
   userId         String       @map("user_id") @db.Char(36)
-  codeService    String       @map("code_service") @db.VarChar(50)
+  codeService    String?      @map("code_service") @db.VarChar(50)
   secteurActivite String?     @map("secteur_activite") @db.VarChar(255)
   ordonateur     String?      @db.VarChar(255)
   createdAt      DateTime     @default(now()) @map("created_at")
@@ -110,8 +113,6 @@ model OperateurEconomique {
   id              String       @id @default(uuid()) @db.Char(36)
   organisationId  String       @map("organisation_id") @db.Char(36)
   userId          String       @map("user_id") @db.Char(36)
-  qualifications  String?      @db.Text
-  categories      String?      @db.VarChar(255)
   isEligible      Boolean      @default(false) @map("is_eligible")
   isBlacklisted   Boolean      @default(false) @map("is_blacklisted")
   raisonBlacklist String?      @map("raison_blacklist") @db.Text
