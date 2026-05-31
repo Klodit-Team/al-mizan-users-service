@@ -5,9 +5,9 @@ import { BlacklistOperateurDto } from './dto/blacklist-operateur.dto';
 import { CreateOperateurEconomiqueDto } from './dto/create-operateur-economique.dto';
 import { UpdateOperateurEconomiqueDto } from './dto/update-operateur-economique.dto';
 import { OperateursEconomiquesService } from './operateurs-economiques.service';
-import { OperateurEconomiqueEntity, PaginatedOperateurEconomiqueEntity } from './entities/operateur-economique.entity';
-import { DeleteResponseEntity } from '../organisations/entities/organisation.entity';
 import { OperateurEconomiqueEntity, PaginatedOperateurEconomiqueEntity, OperateurEconomiqueProfileEntity } from './entities/operateur-economique.entity';
+import { DeleteResponseEntity } from '../organisations/entities/organisation.entity';
+
 @ApiTags('Operateurs Economiques')
 @Controller('operateurs-economiques')
 export class OperateursEconomiquesController {
@@ -26,6 +26,7 @@ export class OperateursEconomiquesController {
   list(@Query() dto: PaginationQueryDto): Promise<any> {
     return this.operateursEconomiquesService.list(dto);
   }
+
   @Get('profile')
   @ApiOperation({ summary: 'Get own operateur economique profile' })
   @ApiHeader({ name: 'x-user-id', required: true })
@@ -41,6 +42,7 @@ export class OperateursEconomiquesController {
   async updateProfile(@Headers('x-user-id') userId: string, @Body() dto: UpdateOperateurEconomiqueDto): Promise<any> {
     return this.operateursEconomiquesService.updateProfileByUserId(userId, dto);
   }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get operateur economique by ID' })
   @ApiParam({ name: 'id', type: String })
