@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Put, Headers } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiHeader } from '@nestjs/swagger';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { BlacklistOperateurDto } from './dto/blacklist-operateur.dto';
 import { CreateOperateurEconomiqueDto } from './dto/create-operateur-economique.dto';
@@ -7,7 +7,7 @@ import { UpdateOperateurEconomiqueDto } from './dto/update-operateur-economique.
 import { OperateursEconomiquesService } from './operateurs-economiques.service';
 import { OperateurEconomiqueEntity, PaginatedOperateurEconomiqueEntity } from './entities/operateur-economique.entity';
 import { DeleteResponseEntity } from '../organisations/entities/organisation.entity';
-
+import { OperateurEconomiqueEntity, PaginatedOperateurEconomiqueEntity, OperateurEconomiqueProfileEntity } from './entities/operateur-economique.entity';
 @ApiTags('Operateurs Economiques')
 @Controller('operateurs-economiques')
 export class OperateursEconomiquesController {
@@ -26,7 +26,21 @@ export class OperateursEconomiquesController {
   list(@Query() dto: PaginationQueryDto): Promise<any> {
     return this.operateursEconomiquesService.list(dto);
   }
+  @Get('profile')
+  @ApiOperation({ summary: 'Get own operateur economique profile' })
+  @ApiHeader({ name: 'x-user-id', required: true })
+  @ApiResponse({ status: 200, type: OperateurEconomiqueProfileEntity })
+  async getProfile(@Headers('x-user-id') userId: string): Promise<any> {
+    return this.operateursEconomiquesService.getProfileByUserId(userId);
+  }
 
+  @Put('profile')
+  @ApiOperation({ summary: 'Update own operateur economique profile' })
+  @ApiHeader({ name: 'x-user-id', required: true })
+  @ApiResponse({ status: 200, type: OperateurEconomiqueProfileEntity })
+  async updateProfile(@Headers('x-user-id') userId: string, @Body() dto: UpdateOperateurEconomiqueDto): Promise<any> {
+    return this.operateursEconomiquesService.updateProfileByUserId(userId, dto);
+  }
   @Get(':id')
   @ApiOperation({ summary: 'Get operateur economique by ID' })
   @ApiParam({ name: 'id', type: String })
