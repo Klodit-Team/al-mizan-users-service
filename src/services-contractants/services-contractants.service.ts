@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMqService } from '../rabbitmq/rabbitmq.service';
@@ -18,12 +18,25 @@ export class ServicesContractantsService {
     if (!organisation) {
       throw new NotFoundException(`Organisation ${organisationId} not found`);
     }
+    if (organisation.type === 'ENTREPRISE_PRIVEE') {
+      throw new BadRequestException(
+        'Un service contractant ne peut pas être lié à une organisation de type ENTREPRISE_PRIVEE.',
+      );
+    }
   }
 
   async create(dto: CreateServiceContractantDto) {
     await this.ensureOrganisationExists(dto.organisationId);
 
-    const created = await this.prisma.serviceContractant.create({ data: dto });
+    const created = await this.prisma.serviceContractant.create({
+      data: {
+        organisationId: dto.organisationId,
+        userId: dto.userId,
+        codeService: (dto.codeService ?? null) as any,
+        secteurActivite: dto.secteurActivite,
+        ordonateur: dto.ordonateur,
+      },
+    });
 
     await this.rabbitMqService.publish('service-contractant.created', {
       id: created.id,

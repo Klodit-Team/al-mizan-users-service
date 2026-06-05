@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CreateOrganisationDto } from './dto/create-organisation.dto';
 import { ListOrganisationsDto } from './dto/list-organisations.dto';
@@ -126,18 +126,41 @@ export class OrganisationsService {
   }
 
   async verify(id: string) {
-    await this.getById(id);
+    const organisation = await this.getById(id);
 
-    const organisation = await this.prisma.organisation.update({
+    // Contrôle de complétude pour la vérification du dossier
+    const isPublicBody = ['EPA', 'EPIC', 'MINISTERE'].includes(organisation.type);
+    if (!isPublicBody) {
+      // 1. Vérifier les informations textuelles obligatoires
+      if (!organisation.nif || !organisation.nis || !organisation.registreCommerce) {
+        throw new BadRequestException(
+          "Le dossier est incomplet : NIF, NIS et Registre du Commerce sont obligatoires pour ce type d'organisation.",
+        );
+      }
+
+      // 2. Vérifier les documents téléversés
+      const docTypes = organisation.documentReferences.map((ref: any) => ref.type);
+      const hasNifDoc = docTypes.includes('NIF');
+      const hasNisDoc = docTypes.includes('NIS');
+      const hasDenominationDoc = docTypes.includes('DENOMINATION');
+
+      if (!hasNifDoc || !hasNisDoc || !hasDenominationDoc) {
+        throw new BadRequestException(
+          "Le dossier est incomplet : Les documents justificatifs (NIF, NIS, Dénomination/RC) doivent être téléversés.",
+        );
+      }
+    }
+
+    const updated = await this.prisma.organisation.update({
       where: { id },
       data: { isVerified: true },
     });
 
     await this.rabbitMqService.publish('organisation.verified', {
-      organisationId: organisation.id,
+      organisationId: updated.id,
     });
 
-    return organisation;
+    return updated;
   }
 
   async delete(id: string) {

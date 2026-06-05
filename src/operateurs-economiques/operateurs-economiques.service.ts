@@ -24,7 +24,16 @@ export class OperateursEconomiquesService {
   async create(dto: CreateOperateurEconomiqueDto) {
     await this.ensureOrganisationExists(dto.organisationId);
 
-    const created = await this.prisma.operateurEconomique.create({ data: dto });
+    const { banqueNom, banqueRib, banqueAgence, ...createData } = dto;
+
+    if (banqueNom !== undefined || banqueRib !== undefined || banqueAgence !== undefined) {
+      await this.prisma.organisation.update({
+        where: { id: dto.organisationId },
+        data: { banqueNom, banqueRib, banqueAgence },
+      });
+    }
+
+    const created = await this.prisma.operateurEconomique.create({ data: createData });
 
     await this.rabbitMqService.publish('operateur.created', {
       id: created.id,
@@ -71,15 +80,25 @@ export class OperateursEconomiquesService {
   }
 
   async update(id: string, dto: UpdateOperateurEconomiqueDto) {
-    await this.getById(id);
+    const existing = await this.getById(id);
 
     if (dto.organisationId) {
       await this.ensureOrganisationExists(dto.organisationId);
     }
 
+    const { banqueNom, banqueRib, banqueAgence, ...updateData } = dto;
+
+    const orgId = dto.organisationId || existing.organisationId;
+    if (banqueNom !== undefined || banqueRib !== undefined || banqueAgence !== undefined) {
+      await this.prisma.organisation.update({
+        where: { id: orgId },
+        data: { banqueNom, banqueRib, banqueAgence },
+      });
+    }
+
     const updated = await this.prisma.operateurEconomique.update({
       where: { id },
-      data: dto,
+      data: updateData,
     });
 
     await this.rabbitMqService.publish('operateur.updated', {

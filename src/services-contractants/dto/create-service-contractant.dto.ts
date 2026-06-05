@@ -7,9 +7,10 @@ export class CreateServiceContractantDto {
   @IsUUID()
   userId!: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(50)
-  codeService!: string;
+  codeService?: string;
 
   @IsOptional()
   @IsString()

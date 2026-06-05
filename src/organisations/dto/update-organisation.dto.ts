@@ -70,6 +70,21 @@ export class UpdateOrganisationDto {
   email?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  banqueNom?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  banqueRib?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  banqueAgence?: string;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrganisationDocumentDto)

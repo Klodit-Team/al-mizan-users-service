@@ -10,15 +10,21 @@ export class UpdateOperateurEconomiqueDto {
   userId?: string;
 
   @IsOptional()
-  @IsString()
-  qualifications?: string;
+  @IsBoolean()
+  isEligible?: boolean;
 
   @IsOptional()
   @IsString()
   @MaxLength(255)
-  categories?: string;
+  banqueNom?: string;
 
   @IsOptional()
-  @IsBoolean()
-  isEligible?: boolean;
+  @IsString()
+  @MaxLength(20)
+  banqueRib?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  banqueAgence?: string;
 }
