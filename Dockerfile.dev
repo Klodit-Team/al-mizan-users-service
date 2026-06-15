@@ -1,0 +1,9 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+COPY prisma ./prisma/
+RUN npm install
+RUN npx prisma generate
+EXPOSE 3002
+ENV NODE_ENV=development
+CMD ["sh", "-c", "npx prisma db push --skip-generate 2>/dev/null || true && npm run start:dev"]

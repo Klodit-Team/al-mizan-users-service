@@ -190,8 +190,8 @@ export class OperateursEconomiquesService {
         verificationStatus: entity.organisation?.isVerified ? 'verifie' : 'en_attente',
       },
       operateurInfo: {
-        qualifications: entity.qualifications || '',
-        categories: entity.categories || '',
+        qualifications: '',
+        categories: '',
         isEligible: entity.isEligible,
         isBlacklisted: entity.isBlacklisted,
       },
